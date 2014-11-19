@@ -1,0 +1,123 @@
+---
+title: "Practical Machine Learning Project"
+author: "Alexandre Ph. Clement"
+date: "17/11/2014"
+output: html_document
+---
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+
+## Getting And Loading Data
+The following code downloads and loads the training and test sets.
+
+```{r loadData, echo = T, eval = T, message = FALSE, cache = T} 
+training.url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+testing.url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+
+download.file(url = training.url, destfile = 'pml-training.csv', method = "curl")
+download.file(url = testing.url, destfile = 'pml-testing.csv', method = "curl")
+
+train <- read.csv('pml-training.csv')
+test <- read.csv('pml-testing.csv')
+```
+
+## Cleaning data
+We remove mostly empty variables from the dataset. Cleaning procedure is detailled below.
+
+```{r, echo = T, eval = T, message = FALSE, cache = F} 
+# number of observations
+nobs <- nrow(train)
+# test all values to check it is NA or empty string
+invalid.data <- is.na(train) | train == ''
+# get the proportion of invalid values for each variable
+inv.props <- colSums(invalid.data) / nobs
+## keep only variables that have a proportion of invalid values below 40%
+valid.vars <- inv.props <= .4
+
+cleanup <- function(data) {
+  #subset to keep only valid and non-empty variables
+  data <- data[, valid.vars]
+  #remove 7 first columns which are useless
+  data <- data[, -(1:7)]
+  data
+}
+train <- cleanup(train)
+test <- cleanup(test)
+``` 
+
+Once cleaned up the dataset is reduced to only:
+
+```{r, echo = T, eval = T} 
+dim(train)
+dim(test)
+```
+
+## Training and testing set split
+We will manually cross validate our model with the testing set. Let's split our data into a training and a testing set with a ratio of 60%.
+
+```{r, echo = T, eval = T, cache = F} 
+library(caret)
+in.train <- createDataPartition(y = train$classe, p = .6, list = FALSE)
+training <- train[in.train, ]
+testing <- train[-in.train, ]
+```
+
+## Model fitting
+
+### Random forest
+I chosse the random forest classification tree algorithm because it is unexcelled in accuracy among current algorithms.
+Below is the complete list of features that made him the right choice:
+
+- It is unexcelled in accuracy among current algorithms.
+- It runs efficiently on large data bases.
+- It can handle thousands of input variables without variable deletion.
+- It gives estimates of what variables are important in the classification.
+- It generates an internal unbiased estimate of the generalization error as the forest building progresses.
+- It has an effective method for estimating missing data and maintains accuracy when a large proportion of the data are missing.
+- It has methods for balancing error in class population unbalanced data sets.
+- Generated forests can be saved for future use on other data.
+- Prototypes are computed that give information about the relation between the variables and the classification.
+- It computes proximities between pairs of cases that can be used in clustering, locating outliers, or (by scaling) give interesting views of the data.
+- The capabilities of the above can be extended to unlabeled data, leading to unsupervised clustering, data views and outlier detection.
+- It offers an experimental method for detecting variable interactions.
+
+### Model training
+We will use the caret train function with method "rf" (randomForest) with cross-Validation (4 fold) resampling.
+```{r, echo = T, eval = T, cache = T} 
+library(caret)
+library(randomForest)
+fit <- train(classe ~ ., data = training, method = "rf", 
+             trControl = trainControl(method = 'cv', number = 4, allowParallel = T))
+fit
+```
+As we can see accuracy is very high (100%). 
+
+## Manual cross-validation
+
+We perform a manual cross validation using our testing dataset.
+
+```{r, echo = T, eval = T} 
+pred <- predict(fit, testing)
+confusionMatrix(pred, testing$classe)
+```
+
+We can see that accuracy obtained on our test set is very high (~99%) 
+
+## Submission
+
+Let's apply our model to the submission test set.
+```{r, echo = T, eval = T} 
+results <- predict(fit, test)
+print(results)
+pml_write_files <- function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(results)
+```
