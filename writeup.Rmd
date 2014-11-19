@@ -54,14 +54,14 @@ dim(train)
 dim(test)
 ```
 
-## Training and testing set split
-We will manually cross validate our model with the testing set. Let's split our data into a training and a testing set with a ratio of 60%.
+## Training and validating set split
+We will manually cross validate our model with the validating set. Let's split our data into a training and a validating set with a ratio of 60%.
 
-```{r, echo = T, eval = T, cache = F} 
+```{r, echo = T, eval = T, cache = F, message=FALSE} 
 library(caret)
 in.train <- createDataPartition(y = train$classe, p = .6, list = FALSE)
 training <- train[in.train, ]
-testing <- train[-in.train, ]
+validating <- train[-in.train, ]
 ```
 
 ## Model fitting
@@ -85,25 +85,41 @@ Below is the complete list of features that made him the right choice:
 
 ### Model training
 We will use the caret train function with method "rf" (randomForest) with cross-Validation (4 fold) resampling.
-```{r, echo = T, eval = T, cache = T} 
+We will also use the doMC package for true multi-core parallel processing to speed up the process.
+```{r, echo = T, eval = T, message=F, cache = F} 
 library(caret)
 library(randomForest)
+library(doMC)
+registerDoMC(cores = 4)
+```
+```{r, echo = T, eval = T, cache = T}
 fit <- train(classe ~ ., data = training, method = "rf", 
              trControl = trainControl(method = 'cv', number = 4, allowParallel = T))
 fit
 ```
-As we can see accuracy is very high (100%). 
+
+### Accuracy rate
+As we can see accuracy is very high.
+```{r, echo = T, eval = T} 
+max(fit$results$Accuracy)
+```
 
 ## Manual cross-validation
 
-We perform a manual cross validation using our testing dataset.
+We perform a manual cross validation using our validating dataset.
 
 ```{r, echo = T, eval = T} 
-pred <- predict(fit, testing)
-confusionMatrix(pred, testing$classe)
+pred <- predict(fit, validating)
+cmat <- confusionMatrix(pred, validating$classe)
+cmat
 ```
-
-We can see that accuracy obtained on our test set is very high (~99%) 
+### Accuracy and Out of sample error rate 
+We can see that accuracy obtained on our test set is very high.
+```{r, echo = T, eval = T} 
+accuracy <- cmat$overall['Accuracy']
+rates <- c(accuracy, 1 - accuracy); names(rates) <- c('Accuracy', 'Error.Rate')
+rates
+```
 
 ## Submission
 
@@ -120,4 +136,23 @@ pml_write_files <- function(x){
 }
 
 pml_write_files(results)
+```
+
+## Appendix
+### Variable importance
+Let's display the variable importance computed during random forest model building.
+```{r, echo = T, eval = T} 
+varImp(fit)
+```
+
+### Model plot
+Let's plot the two most important predictors of our model.
+```{r, echo = T, eval = T} 
+qplot(roll_belt, pitch_forearm, colour = classe, data = validating, main = "Newdata Predictions")
+```
+
+### Miss-classification errors
+```{r, echo = T, eval = T} 
+validating$predRight <- pred == validating$classe
+qplot(roll_belt, pitch_forearm, colour = predRight, data = validating, main = "Miss-classification errors")
 ```
